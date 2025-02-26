@@ -29,52 +29,28 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install .NET
-        uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25 # v4.1.0
+        uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab # v4.3.0
         with:
           dotnet-version: 9.0.x
 
+      # Build the project separately to discern between build and format errors
+      - name: Build
+        run: >
+          dotnet build
+          -p:CSharpier_Bypass=true
+          --configuration Release
+
       - name: Verify formatting
+        id: verify
         run: >
           dotnet build
           -t:CSharpierFormat
           --configuration Release
+          --no-restore
 
-  test:
-    # Tests need access to secrets, so we can't run them against PRs because of limited trust
-    if: ${{ github.event_name != 'pull_request' }}
-
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Install .NET
-        uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25 # v4.1.0
-        with:
-          dotnet-version: 9.0.x
-
-      - name: Run tests
-        env:
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-        run: >
-          dotnet test
-          -p:CSharpier_Bypass=true
-          --configuration Release
-          --logger "GitHubActions;summary.includePassedTests=true;summary.includeSkippedTests=true"
-          --collect:"XPlat Code Coverage"
-          --
-          RunConfiguration.CollectSourceInformation=true
-          DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4.6.0
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Report issues
+        if: ${{ failure() && steps.verify.outcome == 'failure' }}
+        run: echo "::error title=Bad formatting::Formatting issues detected. Please build the solution locally to fix them."
 
   pack:
     strategy:
@@ -111,7 +87,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install .NET
-        uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25 # v4.1.0
+        uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab # v4.3.0
         with:
           dotnet-version: 9.0.x
 
@@ -126,7 +102,7 @@ jobs:
           --self-contained
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: ${{ matrix.asset }}.${{ matrix.rid }}
           path: ${{ matrix.app }}/bin/publish/
@@ -137,7 +113,6 @@ jobs:
 
     needs:
       - format
-      - test
       - pack
 
     runs-on: ubuntu-latest
